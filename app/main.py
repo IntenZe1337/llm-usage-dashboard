@@ -23,6 +23,7 @@ CLAUDE_SESSION_KEY = os.getenv("CLAUDE_SESSION_KEY", "")
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
 
 CODEX_DB = Path(os.getenv("CODEX_DB", "/data/codex/state_5.sqlite"))
+CODEX_SESSIONS_DIR = Path(os.getenv("CODEX_SESSIONS_DIR", "/data/codex/sessions"))
 CLAUDE_META_DIR = Path(os.getenv("CLAUDE_META_DIR", "/data/claude/usage-data/session-meta"))
 CLAUDE_PROJECTS_DIR = Path(os.getenv("CLAUDE_PROJECTS_DIR", "/data/claude/projects"))
 
@@ -58,6 +59,47 @@ def _read_codex_local() -> dict:
         }
     except Exception as e:
         return {"available": False, "error": str(e), "tokens_today": None, "tokens_7d": None}
+
+
+def _read_codex_rate_limits() -> dict:
+    """Läs senaste rate_limits med faktisk used_percent från Codex session-JSONL."""
+    if not CODEX_SESSIONS_DIR.exists():
+        return {"available": False}
+    try:
+        files = sorted(CODEX_SESSIONS_DIR.glob("**/*.jsonl"),
+                       key=lambda p: p.stat().st_mtime, reverse=True)
+        for fpath in files[:30]:
+            lines = list(fpath.open(errors="ignore"))
+            for line in reversed(lines):
+                try:
+                    d = json.loads(line)
+                    if d.get("type") != "event_msg":
+                        continue
+                    p = d.get("payload", {})
+                    if p.get("type") != "token_count":
+                        continue
+                    rl = p.get("rate_limits") or {}
+                    if not rl or rl.get("primary") is None:
+                        continue
+                    primary = rl.get("primary") or {}
+                    secondary = rl.get("secondary") or {}
+                    return {
+                        "available": True,
+                        "limit_id": rl.get("limit_id"),
+                        "plan_type": rl.get("plan_type"),
+                        "primary_used_pct": primary.get("used_percent"),
+                        "primary_window_min": primary.get("window_minutes"),
+                        "primary_resets_at": primary.get("resets_at"),
+                        "secondary_used_pct": secondary.get("used_percent"),
+                        "secondary_window_min": secondary.get("window_minutes"),
+                        "secondary_resets_at": secondary.get("resets_at"),
+                        "measured_at": d.get("timestamp", ""),
+                    }
+                except Exception:
+                    pass
+        return {"available": False, "note": "Ingen session med rate_limit-data hittad"}
+    except Exception as e:
+        return {"available": False, "error": str(e)}
 
 
 def _read_claude_local() -> dict:
@@ -191,6 +233,7 @@ async def _build_data() -> dict:
     return {
         "claude_code": _read_claude_local(),
         "codex": _read_codex_local(),
+        "codex_limits": _read_codex_rate_limits(),
         "claude_api": claude_api,
         "openai_api": openai_api,
         "claude_subscription": claude_sub,
@@ -238,18 +281,25 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   * {{ box-sizing: border-box; margin: 0; padding: 0 }}
   body {{ background: #0f1117; color: #e2e8f0; font-family: system-ui, sans-serif; padding: 1.5rem }}
   h1 {{ font-size: 1.1rem; font-weight: 600; color: #94a3b8; margin-bottom: 1.25rem; letter-spacing: .04em }}
-  .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; max-width: 680px }}
-  @media (max-width: 480px) {{ .grid {{ grid-template-columns: 1fr }} }}
+  .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; max-width: 720px }}
+  @media (max-width: 520px) {{ .grid {{ grid-template-columns: 1fr }} }}
   .card {{ background: #1e2330; border-radius: 10px; padding: 1rem 1.2rem }}
-  .card h2 {{ font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: #64748b; margin-bottom: .75rem }}
+  .card h2 {{ font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: #64748b; margin-bottom: .8rem }}
   .row {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .35rem }}
   .label {{ font-size: .8rem; color: #94a3b8 }}
-  .value {{ font-size: 1rem; font-weight: 600; color: #f1f5f9 }}
+  .value {{ font-size: .95rem; font-weight: 600; color: #f1f5f9 }}
+  .bar-wrap {{ margin: .4rem 0 .6rem }}
+  .bar-label {{ display: flex; justify-content: space-between; font-size: .72rem; color: #94a3b8; margin-bottom: .25rem }}
+  .bar-track {{ background: #334155; border-radius: 4px; height: 6px; overflow: hidden }}
+  .bar-fill {{ height: 100%; border-radius: 4px; transition: width .4s ease }}
+  .bar-low {{ background: #22c55e }}
+  .bar-mid {{ background: #f59e0b }}
+  .bar-high {{ background: #ef4444 }}
+  .reset {{ font-size: .68rem; color: #475569; margin-top: .15rem }}
   .pill {{ display: inline-block; font-size: .65rem; border-radius: 4px; padding: 1px 6px; margin-left: .4rem; font-weight: 600 }}
   .ok {{ background: #14532d; color: #86efac }}
   .warn {{ background: #713f12; color: #fde68a }}
   .err {{ background: #450a0a; color: #fca5a5 }}
-  .dim {{ color: #475569; font-size: .75rem }}
   .footer {{ margin-top: 1.25rem; display: flex; align-items: center; gap: .75rem }}
   .ts {{ font-size: .72rem; color: #475569 }}
   button {{ background: #334155; border: none; color: #cbd5e1; padding: .35rem .85rem; border-radius: 6px; cursor: pointer; font-size: .8rem }}
@@ -264,10 +314,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <div class="grid" id="grid">{cards}</div>
 <div class="footer">
   <span class="ts" id="ts">Uppdaterad {updated_at}</span>
-  <button onclick="refresh()">↺ Uppdatera</button>
+  <button onclick="doRefresh()">↺ Uppdatera</button>
 </div>
 <script>
-async function refresh() {{
+async function doRefresh() {{
   document.querySelector('button').innerHTML = '<span class="spinning">↺</span> Uppdaterar…';
   try {{
     await fetch('/refresh', {{method:'POST'}});
@@ -285,58 +335,71 @@ function fmt(n) {{
 function row(label, value) {{
   return `<div class="row"><span class="label">${{label}}</span><span class="value">${{value}}</span></div>`;
 }}
-function card(title, rows) {{
-  return `<div class="card"><h2>${{title}}</h2>${{rows.join('')}}</div>`;
+function bar(label, pct, resetsAt) {{
+  if (pct === null || pct === undefined) return '';
+  const cls = pct >= 85 ? 'bar-high' : pct >= 60 ? 'bar-mid' : 'bar-low';
+  let resetStr = '';
+  if (resetsAt) {{
+    const d = new Date(resetsAt * 1000);
+    resetStr = `<div class="reset">Återställs ${{d.toLocaleString('sv-SE', {{dateStyle:'short',timeStyle:'short'}})}}</div>`;
+  }}
+  return `<div class="bar-wrap">
+    <div class="bar-label"><span>${{label}}</span><span>${{pct.toFixed(0)}}%</span></div>
+    <div class="bar-track"><div class="bar-fill ${{cls}}" style="width:${{Math.min(pct,100)}}%"></div></div>
+    ${{resetStr}}
+  </div>`;
+}}
+function card(title, content) {{
+  return `<div class="card"><h2>${{title}}</h2>${{content}}</div>`;
 }}
 function renderData(d) {{
   const cc = d.claude_code || {{}};
   const cx = d.codex || {{}};
+  const cl = d.codex_limits || {{}};
   const cs = d.claude_subscription || {{}};
   const ca = d.claude_api || {{}};
   const oa = d.openai_api || {{}};
 
-  const cards = [
-    card('Claude Code · lokal', [
-      row('Output 5h', fmt(cc.output_tokens_5h)),
-      row('Output 7d', fmt(cc.output_tokens_7d)),
-      row('Totalt (ink. cache) 7d', fmt(cc.tokens_7d)),
-    ]),
-    card('Codex · lokal', [
-      row('Idag', fmt(cx.tokens_today)),
-      row('Sessioner idag', cx.sessions_today ?? '—'),
-      row('Senaste 7d', fmt(cx.tokens_7d)),
-    ]),
-  ];
+  const cards = [];
 
+  // Codex abonnemang (rate limits från JSONL)
+  if (cl.available && cl.primary_used_pct !== undefined) {{
+    const mAt = cl.measured_at ? new Date(cl.measured_at).toLocaleString('sv-SE',{{dateStyle:'short',timeStyle:'short'}}) : '';
+    cards.push(card(`Codex · abonnemang${{cl.plan_type ? ' (' + cl.plan_type + ')' : ''}}`,
+      bar('5h-fönster', cl.primary_used_pct, cl.primary_resets_at) +
+      bar('7d-fönster', cl.secondary_used_pct, cl.secondary_resets_at) +
+      `<div class="reset">Mätt ${{mAt}}</div>`
+    ));
+  }}
+
+  // Claude abonnemang (behöver sessionKey)
   if (cs.configured && !cs.error) {{
-    const five_h = cs.five_hour_usage;
-    const seven_d = cs.seven_day_usage;
-    cards.push(card('Claude · abonnemang', [
-      five_h !== undefined ? row('5h-fönster', (five_h*100).toFixed(0) + '%') : '',
-      seven_d !== undefined ? row('7d-fönster', (seven_d*100).toFixed(0) + '%') : '',
-      row('Status', cs.error ? '<span class="pill err">fel</span>' : '<span class="pill ok">ok</span>'),
-    ]));
+    const fiveH = (cs.five_hour_usage ?? cs.five_hour ?? null);
+    const sevenD = (cs.seven_day_usage ?? cs.seven_day ?? null);
+    const fivePct = fiveH !== null ? fiveH * 100 : null;
+    const sevenPct = sevenD !== null ? sevenD * 100 : null;
+    cards.push(card('Claude · abonnemang',
+      bar('5h-fönster', fivePct, cs.five_hour_resets_at) +
+      bar('7d-fönster', sevenPct, cs.seven_day_resets_at)
+    ));
   }}
 
-  if (ca.configured && ca.total_tokens !== undefined) {{
-    cards.push(card('Claude API-nyckel (idag)', [
-      row('Input', fmt(ca.input_tokens)),
-      row('Output', fmt(ca.output_tokens)),
-      row('Totalt', fmt(ca.total_tokens)),
-    ]));
-  }}
-
-  if (oa.configured && oa.total_tokens !== undefined) {{
-    cards.push(card('OpenAI API-nyckel (idag)', [
-      row('Input', fmt(oa.input_tokens)),
-      row('Output', fmt(oa.output_tokens)),
-      row('Totalt', fmt(oa.total_tokens)),
-    ]));
-  }}
+  // Token-räknare
+  cards.push(card('Claude Code · tokens',
+    row('Output 5h', fmt(cc.output_tokens_5h)) +
+    row('Output 7d', fmt(cc.output_tokens_7d)) +
+    row('Totalt (ink. cache) 7d', fmt(cc.tokens_7d))
+  ));
+  cards.push(card('Codex · tokens',
+    row('Idag', fmt(cx.tokens_today)) +
+    row('Sessioner idag', cx.sessions_today ?? '—') +
+    row('Senaste 7d', fmt(cx.tokens_7d))
+  ));
 
   document.getElementById('grid').innerHTML = cards.join('');
   document.getElementById('ts').textContent = 'Uppdaterad ' + (d.updated_at || '');
 }}
+renderData(window.__data || {{}});
 </script>
 </body>
 </html>"""
@@ -345,42 +408,16 @@ function renderData(d) {{
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
     d = await _get_data()
-    cc = d["claude_code"]
-    cx = d["codex"]
-
-    def row(label, value):
-        return f'<div class="row"><span class="label">{label}</span><span class="value">{value}</span></div>'
-
-    def card(title, *rows):
-        return f'<div class="card"><h2>{title}</h2>{"".join(rows)}</div>'
-
-    cards = [
-        card("Claude Code · lokal",
-             row("Output 5h", _fmt(cc.get("output_tokens_5h"))),
-             row("Output 7d", _fmt(cc.get("output_tokens_7d"))),
-             row("Totalt (ink. cache) 7d", _fmt(cc.get("tokens_7d"))),
-             ),
-        card("Codex · lokal",
-             row("Idag", f'{_fmt(cx.get("tokens_today"))} tokens'),
-             row("Sessioner idag", str(cx.get("sessions_today") or "—")),
-             row("Senaste 7d", f'{_fmt(cx.get("tokens_7d"))} tokens'),
-             ),
-    ]
-
-    sub = d["claude_subscription"]
-    if sub.get("configured") and not sub.get("error"):
-        five_h = sub.get("five_hour_usage")
-        seven_d = sub.get("seven_day_usage")
-        cards.append(card(
-            "Claude · abonnemang",
-            row("5h-fönster", f'{five_h*100:.0f}%' if five_h is not None else "—"),
-            row("7d-fönster", f'{seven_d*100:.0f}%' if seven_d is not None else "—"),
-        ))
-
     html = DASHBOARD_HTML.format(
         date=d["date"],
         updated_at=d["updated_at"],
-        cards="".join(cards),
+        cards="<div style='color:#475569;font-size:.8rem'>Laddar…</div>",
+    )
+    # Injicera data direkt så sidan renderas utan extra fetch
+    data_json = json.dumps(d, ensure_ascii=False)
+    html = html.replace(
+        "renderData(window.__data || {{}});",
+        f"window.__data={data_json}; renderData(window.__data);"
     )
     return HTMLResponse(html)
 
