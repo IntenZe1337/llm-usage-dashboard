@@ -8,3 +8,9 @@ services:
       - "100.106.95.127:8099:8099"
     env_file:
       - .env
+    volumes:
+      - /home/rasmus/.codex:/data/codex:ro
+      - /home/rasmus/.claude:/data/claude:ro
+    environment:
+      - CLAUDE_PROJECTS_DIR=/data/claude/projects
+    user: "1000:1000"
