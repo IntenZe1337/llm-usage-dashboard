@@ -1,0 +1,10 @@
+services:
+  llm-usage-dashboard:
+    build: .
+    image: llm-usage-dashboard:latest
+    container_name: llm-usage-dashboard
+    restart: unless-stopped
+    ports:
+      - "100.106.95.127:8099:8099"
+    env_file:
+      - .env
