@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- Claude-abonnemangsprocent stöder nu Claude-webbens aktuella `five_hour`/`seven_day`-schema med `utilization` och ISO-reset.
+- Claude-webbhämtning kan använda full cookie-sträng och fast org-id när `sessionKey` ensam ger 403.
+
+### Changed
+- HTML-dashboarden visar appens byggversion.
+
 ## [2026-05-17.1] - v1-mvp (post1)
 
 ### Changed
