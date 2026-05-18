@@ -1,4 +1,4 @@
-__version__ = "2026.5.18"
+__version__ = "2026.5.18.post1"
 
 import asyncio
 import glob
@@ -467,10 +467,43 @@ async def usage_codex_local():
     return JSONResponse({**d["codex"], "date": d["date"], "updated_at": d["updated_at"]})
 
 
+@app.get("/usage/codex-limits")
+async def usage_codex_limits():
+    d = await _get_data()
+    limits = d["codex_limits"]
+    return JSONResponse({
+        "available": limits.get("available", False),
+        "used_percent_5h": limits.get("primary_used_pct"),
+        "used_percent_7d": limits.get("secondary_used_pct"),
+        "resets_at_5h": limits.get("primary_resets_at"),
+        "resets_at_7d": limits.get("secondary_resets_at"),
+        "date": d["date"],
+        "updated_at": d["updated_at"],
+    })
+
+
 @app.get("/usage/claude")
 async def usage_claude_api():
     d = await _get_data()
     return JSONResponse({**d["claude_api"], "date": d["date"], "updated_at": d["updated_at"]})
+
+
+@app.get("/usage/claude-subscription")
+async def usage_claude_subscription():
+    d = await _get_data()
+    sub = d["claude_subscription"]
+    five_hour = sub.get("five_hour") or {}
+    seven_day = sub.get("seven_day") or {}
+    return JSONResponse({
+        "configured": sub.get("configured", False),
+        "error": sub.get("error"),
+        "used_percent_5h": five_hour.get("utilization"),
+        "used_percent_7d": seven_day.get("utilization"),
+        "resets_at_5h": five_hour.get("resets_at"),
+        "resets_at_7d": seven_day.get("resets_at"),
+        "date": d["date"],
+        "updated_at": d["updated_at"],
+    })
 
 
 @app.get("/usage/openai")
