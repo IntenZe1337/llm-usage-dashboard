@@ -1,68 +1,57 @@
 # llm-usage-dashboard
 
-> **Senaste version:** [`v1-mvp`](https://github.com/IntenZe1337/llm-usage-dashboard/releases/latest) — MVP
+> **Senaste version:** [`v1-mvp`](https://github.com/IntenZe1337/llm-usage-dashboard/releases/latest) — MVP.
 > Versionshistorik: [Releases](https://github.com/IntenZe1337/llm-usage-dashboard/releases) · [CHANGELOG.md](CHANGELOG.md)
 
-Minimalistisk API-tjänst som exponerar dagens token-användning för Claude (Anthropic) och OpenAI/Codex som JSON — avsedd för Homepage customapi-widgetar.
+Minimalistisk FastAPI-tjänst som exponerar lokal Claude Code-/Codex-användning, API-tokenanvändning och abonnemangs-/rate-limit-status som JSON för Homepage och en enkel HTML-dashboard.
 
 ## Endpoints
 
 | Endpoint | Beskrivning |
 |---|---|
-| `GET /usage` | Kombinerad JSON med Claude + OpenAI |
-| `GET /usage/claude` | Platt JSON med enbart Claude-data |
-| `GET /usage/openai` | Platt JSON med enbart OpenAI-data |
-| `GET /health` | Status + version |
+| `GET /` | HTML-dashboard |
+| `POST /refresh` | Tvingar cache-refresh. Kan skyddas med `REFRESH_TOKEN`. |
+| `GET /usage` | Kombinerad JSON med alla datakällor |
+| `GET /usage/claude-local` | Claude Code-tokenräkning från lokal JSONL |
+| `GET /usage/codex-local` | Codex-tokenräkning från lokal SQLite |
+| `GET /usage/codex-limits` | Codex 5h/7d rate-limit-procent |
+| `GET /usage/claude-subscription` | Claude 5h/7d abonnemangsprocent |
+| `GET /usage/claude` | Anthropic Admin API usage |
+| `GET /usage/openai` | OpenAI Admin API usage |
+| `GET /health` | Process- och konfigstatus |
 
-## Krav på API-nycklar
+## Konfiguration
 
-- **Anthropic:** Admin API-nyckel (`sk-ant-admin...`) — kräver att organisation är satt upp i [Claude Console](https://console.anthropic.com/settings/admin-keys)
-- **OpenAI:** Admin API-nyckel — hämta från [platform.openai.com/settings/organization/admin-keys](https://platform.openai.com/settings/organization/admin-keys)
+Lokal data kräver inga API-nycklar, men Docker Compose monterar förväntade kataloger från Hetzner-användaren `rasmus`.
+
+```bash
+cp .env.example .env
+```
+
+Viktiga val:
+
+| Variabel | Användning |
+|---|---|
+| `CLAUDE_SESSION_KEY`, `CLAUDE_SESSION_KEY_LC`, `CLAUDE_COOKIE`, `CLAUDE_ORG_ID` | Claude.ai abonnemangsstatus |
+| `ANTHROPIC_ADMIN_KEY` | Anthropic Admin API usage |
+| `OPENAI_ADMIN_KEY` | OpenAI Admin API usage |
+| `CACHE_TTL_SECONDS` | Cachetid i sekunder |
+| `REFRESH_TOKEN` | Om satt kräver `POST /refresh` `Authorization: Bearer <token>` |
+| `CORS_ALLOW_ORIGINS` | Kommaseparerad allowlist. Tomt betyder ingen CORS-middleware. |
+
+## Lokal kontroll
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+python -m py_compile app/main.py
+```
 
 ## Deploy
 
 ```bash
-cp .env.example .env
-# Fyll i nycklar i .env
 docker compose up -d --build
+curl -fsS http://100.106.95.127:8099/health
 ```
 
-## Homepage-widget (services.yaml)
-
-```yaml
-- AI & LLM:
-    - Claude (idag):
-        href: https://console.anthropic.com/usage
-        icon: mdi-robot
-        widget:
-          type: customapi
-          url: http://100.106.95.127:8099/usage/claude
-          refreshInterval: 300000
-          mappings:
-            - field: input_tokens
-              label: Input
-              format: number
-            - field: output_tokens
-              label: Output
-              format: number
-            - field: total_tokens
-              label: Totalt
-              format: number
-    - OpenAI/Codex (idag):
-        href: https://platform.openai.com/usage
-        icon: mdi-brain
-        widget:
-          type: customapi
-          url: http://100.106.95.127:8099/usage/openai
-          refreshInterval: 300000
-          mappings:
-            - field: input_tokens
-              label: Input
-              format: number
-            - field: output_tokens
-              label: Output
-              format: number
-            - field: total_tokens
-              label: Totalt
-              format: number
-```
+Se [docs/runbook.md](docs/runbook.md) för Hetzner-runbook med SSH-alias, verifiering och felsökning.

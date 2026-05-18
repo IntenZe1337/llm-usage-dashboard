@@ -1,7 +1,6 @@
-__version__ = "2026.5.18.post2"
+__version__ = "2026.5.18.post3"
 
 import asyncio
-import glob
 import json
 import os
 import sqlite3
@@ -10,12 +9,11 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
 app = FastAPI(title="LLM Usage Dashboard", version=__version__)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"])
 
 ANTHROPIC_ADMIN_KEY = os.getenv("ANTHROPIC_ADMIN_KEY", "")
 OPENAI_ADMIN_KEY = os.getenv("OPENAI_ADMIN_KEY", "")
@@ -24,6 +22,20 @@ CLAUDE_SESSION_KEY_LC = os.getenv("CLAUDE_SESSION_KEY_LC", "")
 CLAUDE_COOKIE = os.getenv("CLAUDE_COOKIE", "")
 CLAUDE_ORG_ID = os.getenv("CLAUDE_ORG_ID", "")
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
+REFRESH_TOKEN = os.getenv("REFRESH_TOKEN", "")
+CORS_ALLOW_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOW_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
+if CORS_ALLOW_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ALLOW_ORIGINS,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
 
 CODEX_DB = Path(os.getenv("CODEX_DB", "/data/codex/state_5.sqlite"))
 CODEX_SESSIONS_DIR = Path(os.getenv("CODEX_SESSIONS_DIR", "/data/codex/sessions"))
@@ -449,7 +461,9 @@ async def dashboard():
 # ── JSON API ──────────────────────────────────────────────────────────────────
 
 @app.post("/refresh")
-async def refresh():
+async def refresh(authorization: str | None = Header(default=None)):
+    if REFRESH_TOKEN and authorization != f"Bearer {REFRESH_TOKEN}":
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
     d = await _get_data(force=True)
     return {"ok": True, "updated_at": d["updated_at"]}
 

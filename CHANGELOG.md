@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- API-kontraktstester för Homepage- och dashboard-endpoints.
+- `docs/runbook.md` med Hetzner-deploy och verifieringskommandon.
 - Platta endpoints för Homepage: `/usage/claude-subscription` och `/usage/codex-limits` exponerar 5h/7d-procent.
 
 ### Fixed
@@ -11,6 +13,7 @@
 - Claude-webbhämtning kan använda full cookie-sträng och fast org-id när `sessionKey` ensam ger 403.
 
 ### Changed
+- `POST /refresh` kan skyddas med `REFRESH_TOKEN`; CORS är nu opt-in via `CORS_ALLOW_ORIGINS`.
 - HTML-dashboarden visar appens byggversion.
 
 ## [2026-05-17.1] - v1-mvp (post1)
