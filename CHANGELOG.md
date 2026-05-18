@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Platta endpoints för Homepage: `/usage/claude-subscription` och `/usage/codex-limits` exponerar 5h/7d-procent.
+
 ### Fixed
 - Claude-abonnemangsprocent stöder nu Claude-webbens aktuella `five_hour`/`seven_day`-schema med `utilization` och ISO-reset.
 - Claude-webbhämtning kan använda full cookie-sträng och fast org-id när `sessionKey` ensam ger 403.
