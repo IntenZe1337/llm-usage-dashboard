@@ -1,4 +1,4 @@
-__version__ = "2026.5.18.post1"
+__version__ = "2026.5.18.post2"
 
 import asyncio
 import glob
@@ -366,6 +366,10 @@ function bar(label, pct, resetsAt) {{
     ${{resetStr}}
   </div>`;
 }}
+function remainingPct(usedPct) {{
+  if (usedPct === null || usedPct === undefined) return null;
+  return Math.max(0, Math.min(100, 100 - usedPct));
+}}
 function card(title, content) {{
   return `<div class="card"><h2>${{title}}</h2>${{content}}</div>`;
 }}
@@ -398,8 +402,8 @@ function renderData(d) {{
     const fiveReset = typeof fiveH === 'object' ? fiveH.resets_at : cs.five_hour_resets_at;
     const sevenReset = typeof sevenD === 'object' ? sevenD.resets_at : cs.seven_day_resets_at;
     cards.push(card('Claude · abonnemang',
-      bar('5h-fönster', fivePct, fiveReset) +
-      bar('7d-fönster', sevenPct, sevenReset)
+      bar('5h kvar', remainingPct(fivePct), fiveReset) +
+      bar('7d kvar', remainingPct(sevenPct), sevenReset)
     ));
   }}
 
