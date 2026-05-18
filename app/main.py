@@ -1,4 +1,4 @@
-__version__ = "2026.5.17"
+__version__ = "2026.5.18"
 
 import asyncio
 import glob
@@ -20,6 +20,9 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "P
 ANTHROPIC_ADMIN_KEY = os.getenv("ANTHROPIC_ADMIN_KEY", "")
 OPENAI_ADMIN_KEY = os.getenv("OPENAI_ADMIN_KEY", "")
 CLAUDE_SESSION_KEY = os.getenv("CLAUDE_SESSION_KEY", "")
+CLAUDE_SESSION_KEY_LC = os.getenv("CLAUDE_SESSION_KEY_LC", "")
+CLAUDE_COOKIE = os.getenv("CLAUDE_COOKIE", "")
+CLAUDE_ORG_ID = os.getenv("CLAUDE_ORG_ID", "")
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
 
 CODEX_DB = Path(os.getenv("CODEX_DB", "/data/codex/state_5.sqlite"))
@@ -161,18 +164,31 @@ def _read_claude_local() -> dict:
 # ── Remote API readers ────────────────────────────────────────────────────────
 
 async def _fetch_claude_subscription() -> dict:
-    if not CLAUDE_SESSION_KEY:
+    if not CLAUDE_SESSION_KEY and not CLAUDE_COOKIE:
         return {"configured": False}
+    if CLAUDE_COOKIE:
+        cookie = CLAUDE_COOKIE
+    else:
+        cookie = f"sessionKey={CLAUDE_SESSION_KEY}"
+        if CLAUDE_SESSION_KEY_LC:
+            cookie += f"; sessionKeyLC={CLAUDE_SESSION_KEY_LC}"
     headers = {
-        "Cookie": f"sessionKey={CLAUDE_SESSION_KEY}",
-        "User-Agent": "llm-usage-dashboard/1.0",
+        "Cookie": cookie,
+        "Accept": "*/*",
+        "Referer": "https://claude.ai/",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+        "anthropic-client-platform": "web_claude_ai",
+        "anthropic-client-version": "1.0.0",
     }
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         try:
-            orgs_r = await client.get("https://claude.ai/api/organizations", headers=headers)
-            orgs_r.raise_for_status()
-            orgs = orgs_r.json()
-            org_id = orgs[0]["uuid"]
+            if CLAUDE_ORG_ID:
+                org_id = CLAUDE_ORG_ID
+            else:
+                orgs_r = await client.get("https://claude.ai/api/organizations", headers=headers)
+                orgs_r.raise_for_status()
+                orgs = orgs_r.json()
+                org_id = orgs[0]["uuid"]
             usage_r = await client.get(
                 f"https://claude.ai/api/organizations/{org_id}/usage", headers=headers
             )
@@ -314,6 +330,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <div class="grid" id="grid">{cards}</div>
 <div class="footer">
   <span class="ts" id="ts">Uppdaterad {updated_at}</span>
+  <span class="ts">Byggversion: {build_version}</span>
   <button onclick="doRefresh()">↺ Uppdatera</button>
 </div>
 <script>
@@ -340,7 +357,7 @@ function bar(label, pct, resetsAt) {{
   const cls = pct >= 85 ? 'bar-high' : pct >= 60 ? 'bar-mid' : 'bar-low';
   let resetStr = '';
   if (resetsAt) {{
-    const d = new Date(resetsAt * 1000);
+    const d = typeof resetsAt === 'number' ? new Date(resetsAt * 1000) : new Date(resetsAt);
     resetStr = `<div class="reset">Återställs ${{d.toLocaleString('sv-SE', {{dateStyle:'short',timeStyle:'short'}})}}</div>`;
   }}
   return `<div class="bar-wrap">
@@ -376,11 +393,13 @@ function renderData(d) {{
   if (cs.configured && !cs.error) {{
     const fiveH = (cs.five_hour_usage ?? cs.five_hour ?? null);
     const sevenD = (cs.seven_day_usage ?? cs.seven_day ?? null);
-    const fivePct = fiveH !== null ? fiveH * 100 : null;
-    const sevenPct = sevenD !== null ? sevenD * 100 : null;
+    const fivePct = typeof fiveH === 'object' ? fiveH.utilization : (fiveH !== null ? fiveH * 100 : null);
+    const sevenPct = typeof sevenD === 'object' ? sevenD.utilization : (sevenD !== null ? sevenD * 100 : null);
+    const fiveReset = typeof fiveH === 'object' ? fiveH.resets_at : cs.five_hour_resets_at;
+    const sevenReset = typeof sevenD === 'object' ? sevenD.resets_at : cs.seven_day_resets_at;
     cards.push(card('Claude · abonnemang',
-      bar('5h-fönster', fivePct, cs.five_hour_resets_at) +
-      bar('7d-fönster', sevenPct, cs.seven_day_resets_at)
+      bar('5h-fönster', fivePct, fiveReset) +
+      bar('7d-fönster', sevenPct, sevenReset)
     ));
   }}
 
@@ -411,6 +430,7 @@ async def dashboard():
     html = DASHBOARD_HTML.format(
         date=d["date"],
         updated_at=d["updated_at"],
+        build_version=__version__,
         cards="<div style='color:#475569;font-size:.8rem'>Laddar…</div>",
     )
     # Injicera data direkt så sidan renderas utan extra fetch
@@ -466,7 +486,7 @@ async def health():
         "version": __version__,
         "claude_api_configured": bool(ANTHROPIC_ADMIN_KEY),
         "openai_api_configured": bool(OPENAI_ADMIN_KEY),
-        "claude_session_configured": bool(CLAUDE_SESSION_KEY),
+        "claude_session_configured": bool(CLAUDE_SESSION_KEY or CLAUDE_COOKIE),
         "codex_db_available": CODEX_DB.exists(),
         "claude_meta_available": CLAUDE_META_DIR.exists(),
     }
