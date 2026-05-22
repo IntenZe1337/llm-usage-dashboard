@@ -1,6 +1,6 @@
 # llm-usage-dashboard
 
-> **Senaste version:** [`v1-mvp`](https://github.com/IntenZe1337/llm-usage-dashboard/releases/latest) — MVP.
+> **Senaste version:** [`v1-post2`](https://github.com/IntenZe1337/llm-usage-dashboard/releases/latest) — Homepage-endpoints, byggversion och CORS.
 > Versionshistorik: [Releases](https://github.com/IntenZe1337/llm-usage-dashboard/releases) · [CHANGELOG.md](CHANGELOG.md)
 
 Minimalistisk FastAPI-tjänst som exponerar lokal Claude Code-/Codex-användning, API-tokenanvändning och abonnemangs-/rate-limit-status som JSON för Homepage och en enkel HTML-dashboard.
