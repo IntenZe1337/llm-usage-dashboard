@@ -1,6 +1,11 @@
 # Changelog
 
+Alla notabla ändringar dokumenteras här. Formatet följer
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
 ## [Unreleased]
+
+## [2026-05-22] - v1-post2
 
 ### Added
 - API-kontraktstester för Homepage- och dashboard-endpoints.
