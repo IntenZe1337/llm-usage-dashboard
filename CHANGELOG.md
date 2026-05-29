@@ -5,6 +5,14 @@ Alla notabla ändringar dokumenteras här. Formatet följer
 
 ## [Unreleased]
 
+### Security
+- Uppgraderar FastAPI/Starlette/Uvicorn och Dockerbildens `pip` för att ta bort
+  kända CVE/GHSA-fynd i den körande containern.
+- Uppdaterar Compose-image-taggen så deployen kan verifiera att den rebuildade
+  dependencybilden faktiskt körs.
+- Uppgraderar testberoendet `pytest` så även repo/dev-auditen är fri från kända
+  GHSA-fynd.
+
 ## [2026-05-22] - v1-post2
 
 ### Added

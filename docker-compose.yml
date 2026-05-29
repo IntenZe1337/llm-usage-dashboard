@@ -1,7 +1,7 @@
 services:
   llm-usage-dashboard:
     build: .
-    image: llm-usage-dashboard:5176fe254c71
+    image: llm-usage-dashboard:security-20260529
     container_name: llm-usage-dashboard
     restart: unless-stopped
     ports:
