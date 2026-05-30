@@ -5,7 +5,7 @@ Alla notabla ändringar dokumenteras här. Formatet följer
 
 ## [Unreleased]
 
-### Security
+### Säkerhet
 - Uppgraderar FastAPI/Starlette/Uvicorn och Dockerbildens `pip` för att ta bort
   kända CVE/GHSA-fynd i den körande containern.
 - Uppdaterar Compose-image-taggen så deployen kan verifiera att den rebuildade
@@ -15,23 +15,23 @@ Alla notabla ändringar dokumenteras här. Formatet följer
 
 ## [2026-05-22] - v1-post2
 
-### Added
+### Tillagt
 - API-kontraktstester för Homepage- och dashboard-endpoints.
 - `docs/runbook.md` med Hetzner-deploy och verifieringskommandon.
 - Platta endpoints för Homepage: `/usage/claude-subscription` och `/usage/codex-limits` exponerar 5h/7d-procent.
 
-### Fixed
+### Åtgärdat
 - Claude-abonnemangskortet visar nu kvarvarande procent i 5h/7d-fönster i stället för förbrukad procent.
 - Claude-abonnemangsprocent stöder nu Claude-webbens aktuella `five_hour`/`seven_day`-schema med `utilization` och ISO-reset.
 - Claude-webbhämtning kan använda full cookie-sträng och fast org-id när `sessionKey` ensam ger 403.
 
-### Changed
+### Ändrat
 - `POST /refresh` kan skyddas med `REFRESH_TOKEN`; CORS är nu opt-in via `CORS_ALLOW_ORIGINS`.
 - HTML-dashboarden visar appens byggversion.
 
 ## [2026-05-17.1] - v1-mvp (post1)
 
-### Changed
+### Ändrat
 - Claude Code: läser nu JSONL-projektfiler istället för session-meta → korrekt token-räkning inkl. cache-tokens
 - Codex: läser tokens_used från ~/.codex/state_5.sqlite (lokal DB)
 - Ny HTML-dashboard på / med refreshknapp och live JS-rendering
@@ -41,7 +41,7 @@ Alla notabla ändringar dokumenteras här. Formatet följer
 
 ## [2026-05-17] - v1-mvp
 
-### Added
+### Tillagt
 - FastAPI-tjänst med endpoints `/usage`, `/usage/claude`, `/usage/openai`, `/health`
 - Hämtar token-användning (idag) från Anthropic Admin API och OpenAI Admin API
 - 5-minuterscache för att respektera API rate limits
